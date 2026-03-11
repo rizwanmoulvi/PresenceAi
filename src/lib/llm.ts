@@ -56,6 +56,16 @@ const GROQ_MODEL_MAP: Record<string, string> = {
   grok:       "llama-3.1-8b-instant",
 };
 
+// Gemini model map — one API key, five different Gemini models per column
+// Free tier: https://aistudio.google.com/app/apikey
+const GEMINI_MODEL_MAP: Record<string, string> = {
+  chatgpt:    "gemini-2.0-flash",       // fast + capable → GPT-4o column
+  claude:     "gemini-1.5-pro",          // thoughtful, long-context → Claude column
+  gemini:     "gemini-1.5-pro",          // native Gemini column
+  perplexity: "gemini-2.0-flash",        // fast search-like → Perplexity column
+  grok:       "gemini-2.0-flash-lite",   // lightweight → Grok column
+};
+
 // ── prompt templates ───────────────────────────────────────────────────────────
 
 function buildSystemPrompt(): string {
@@ -296,14 +306,37 @@ async function callAnthropic(
 
 async function callGemini(
   companyName: string, industry: string, geography: string, products: string,
-  apiKey: string
+  apiKey: string,
+  modelName = "gemini-1.5-pro"
 ): Promise<Record<string, unknown>> {
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+  const model = genAI.getGenerativeModel({ model: modelName });
   const prompt = buildSystemPrompt() + "\n\n" + buildUserPrompt(companyName, industry, geography, products);
   const result = await model.generateContent(prompt);
   const text = result.response.text();
   return extractJSON(text) as Record<string, unknown>;
+}
+
+async function callGeminiInsights(
+  companyName: string, industry: string, geography: string, products: string,
+  results: RealModelScore[],
+  apiKey: string
+): Promise<{ insights: Insight[]; recommendations: Recommendation[] }> {
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    const prompt = buildSystemPrompt() + "\n\n" +
+      buildInsightsPrompt(companyName, industry, geography, products, results);
+    const result = await model.generateContent(prompt);
+    const raw = extractJSON(result.response.text()) as Record<string, unknown>;
+    return {
+      insights:        Array.isArray(raw.insights)        ? raw.insights as Insight[]        : [],
+      recommendations: Array.isArray(raw.recommendations) ? raw.recommendations as Recommendation[] : [],
+    };
+  } catch (err) {
+    console.error("Gemini insights error:", err);
+    return { insights: [], recommendations: [] };
+  }
 }
 
 // ── insights + recommendations via GPT-4o ─────────────────────────────────────
@@ -376,14 +409,16 @@ export async function runRealAnalysis(
   const modelCalls: Promise<RealModelScore>[] = [];
 
   for (const { modelId } of MODELS) {
-    // Per-provider real key takes priority; Groq is the free fallback
-    const useGroq = hasGroq && !(
-      (modelId === "chatgpt"    && hasRealOpenAI) ||
-      (modelId === "claude"     && hasRealAnthropic) ||
-      (modelId === "gemini"     && hasRealGemini) ||
+    // Priority: per-vendor real key > Groq > Gemini (arbitraged) > skip
+    const hasOwnKey =
+      (modelId === "chatgpt"    && hasRealOpenAI)     ||
+      (modelId === "claude"     && hasRealAnthropic)  ||
+      (modelId === "gemini"     && hasRealGemini)     ||
       (modelId === "perplexity" && hasRealPerplexity) ||
-      (modelId === "grok"       && hasRealGrok)
-    );
+      (modelId === "grok"       && hasRealGrok);
+
+    const useGroq   = !hasOwnKey && hasGroq;
+    const useGemini = !hasOwnKey && !hasGroq && hasRealGemini;
 
     if (modelId === "chatgpt" && hasRealOpenAI) {
       modelCalls.push(
@@ -399,7 +434,7 @@ export async function runRealAnalysis(
       );
     } else if (modelId === "gemini" && hasRealGemini) {
       modelCalls.push(
-        callGemini(companyName, industry, geography, products, GEMINI_KEY)
+        callGemini(companyName, industry, geography, products, GEMINI_KEY, GEMINI_MODEL_MAP["gemini"])
           .then((raw) => normaliseScore(raw, companyName, "gemini"))
           .catch((err) => { console.error("Gemini error:", err); return null as unknown as RealModelScore; })
       );
@@ -421,6 +456,13 @@ export async function runRealAnalysis(
         callOpenAI(companyName, industry, geography, products, GROQ_KEY, groqModel, "https://api.groq.com/openai/v1")
           .then((raw) => normaliseScore(raw, companyName, modelId))
           .catch((err) => { console.error(`Groq/${groqModel} error:`, err); return null as unknown as RealModelScore; })
+      );
+    } else if (useGemini) {
+      const geminiModel = GEMINI_MODEL_MAP[modelId] ?? "gemini-2.0-flash";
+      modelCalls.push(
+        callGemini(companyName, industry, geography, products, GEMINI_KEY, geminiModel)
+          .then((raw) => normaliseScore(raw, companyName, modelId))
+          .catch((err) => { console.error(`Gemini/${geminiModel} error:`, err); return null as unknown as RealModelScore; })
       );
     }
   }
@@ -448,13 +490,24 @@ export async function runRealAnalysis(
 
   // ── insights + recommendations ─────────────────────────────────────────────
 
-  const insightKey   = hasRealOpenAI ? OPENAI_KEY : hasGroq ? GROQ_KEY : "";
-  const insightModel = hasRealOpenAI ? "gpt-4o" : "llama-3.3-70b-versatile";
-  const insightBase  = hasRealOpenAI ? undefined : "https://api.groq.com/openai/v1";
+  // insights: OpenAI > Groq > Gemini > skip
+  let insights: Insight[] = [];
+  let recommendations: Recommendation[] = [];
 
-  const { insights, recommendations } = insightKey
-    ? await generateInsightsAndRecs(companyName, industry, geography, products, modelScores, insightKey, insightModel, insightBase)
-    : { insights: [] as Insight[], recommendations: [] as Recommendation[] };
+  if (hasRealOpenAI) {
+    ({ insights, recommendations } = await generateInsightsAndRecs(
+      companyName, industry, geography, products, modelScores, OPENAI_KEY, "gpt-4o"
+    ));
+  } else if (hasGroq) {
+    ({ insights, recommendations } = await generateInsightsAndRecs(
+      companyName, industry, geography, products, modelScores, GROQ_KEY,
+      "llama-3.3-70b-versatile", "https://api.groq.com/openai/v1"
+    ));
+  } else if (hasRealGemini) {
+    ({ insights, recommendations } = await callGeminiInsights(
+      companyName, industry, geography, products, modelScores, GEMINI_KEY
+    ));
+  }
 
   return { overallScore, modelScores, insights, recommendations };
 }

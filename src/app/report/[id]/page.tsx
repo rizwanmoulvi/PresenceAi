@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { Lock, ArrowRight, AlertTriangle, ExternalLink } from "lucide-react";
+import { Lock, ArrowRight, AlertTriangle, ExternalLink, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import toast from "react-hot-toast";
 import type { ModelScore, Insight, Recommendation } from "@/lib/simulate";
 import { AI_MODEL_LOGOS } from "@/components/BrandLogos";
@@ -64,6 +64,77 @@ const MODEL_DESCS: Record<string, string> = {
   perplexity: "Perplexity",
   grok: "Grok",
 };
+
+// ── mock data generators ───────────────────────────────────────────────────────
+
+function getMockShareOfVoice(companyName: string) {
+  const competitors = ["Nike", "Adidas", "Puma", "Reebok", "Others"];
+  const companyShare = 15;
+  const rest = 85;
+  const split = [25, 20, 18, 12, 10].map((v, i) => ({
+    name: competitors[i],
+    pct: v,
+  }));
+  return [{ name: companyName, pct: companyShare }, ...split];
+}
+
+const PALETTE = [
+  "#2e6f9e", // steel-blue
+  "#528547", // mint-cream
+  "#d87941", // sandy-brown
+  "#7c5cbf", // purple
+  "#e05c6f", // red-pink
+  "#e0a429", // amber
+  "#888",    // grey
+];
+
+function getMarketCompetitionData(score: number) {
+  const marketScore = Math.round((score / 100) * 10);
+  return {
+    score: marketScore,
+    mentions: Math.round(score * 12 + 200),
+    comparisonMentions: Math.round(score * 8 + 50),
+    comparisonTopics: [
+      "Pricing & affordability",
+      "Product quality & durability",
+      "Brand awareness",
+      "Distribution network",
+      "Target segment positioning",
+    ],
+  };
+}
+
+function getSentimentData(score: number) {
+  const base = Math.round(50 + score * 0.5);
+  return {
+    totalScore: Math.min(100, base),
+    general: {
+      score: Math.min(100, Math.round(base * 0.95)),
+      description: "Overall customer sentiment reflects satisfaction with product quality, design, and value.",
+      keyFactors: ["Product quality", "Customer testimonials", "Industry reviews"],
+    },
+    contextual: {
+      score: Math.min(100, Math.round(base * 1.02)),
+      description: "Brand perception remains consistent across sector-specific discussions and targeted use cases.",
+      keyFactors: ["Addresses specific customer needs", "Competitive pricing strategy", "Strong positioning in segment"],
+    },
+    sourceBased: {
+      score: Math.min(100, Math.round(base * 0.98)),
+      description: "Sentiment is consistently positive across reviews, publications, and third-party platforms.",
+      keyFactors: ["4.8/5 stars on verified reviews", "Positive long-form YouTube reviews", "Industry publication recognition"],
+    },
+    polarization: {
+      score: Math.round(100 - base * 0.3),
+      description: "Low polarization indicates strong consensus with minimal negative sentiment.",
+      insights: ["Consistent product quality messaging", "Effective marketing strategies", "Unified brand voice"],
+    },
+    sources: [
+      { name: "Industry Publications", type: "Industry publication", score: 85, note: "Recognized as a strong performer in design and innovation." },
+      { name: "Customer Reviews", type: "Online review aggregator", score: 78, note: "Customers consistently praise comfort, style, and value." },
+      { name: "Social Media", type: "Social sentiment platform", score: Math.min(100, Math.round(base * 0.9)), note: "Positive brand conversations trending across major platforms." },
+    ],
+  };
+}
 
 // ── score arc gauge ────────────────────────────────────────────────────────────
 
@@ -130,6 +201,78 @@ function MeterBar({ value, max }: { value: number; max: number }) {
           transition: "width 1s ease-out",
         }}
       />
+    </div>
+  );
+}
+
+// ── pie chart (SVG) ────────────────────────────────────────────────────────────
+
+function PieChart({ slices }: { slices: { name: string; pct: number }[] }) {
+  let cum = 0;
+  const total = slices.reduce((a, s) => a + s.pct, 0);
+  const r = 38;
+  const cx = 50;
+  const cy = 50;
+
+  const paths = slices.map((s, i) => {
+    const start = (cum / total) * 2 * Math.PI - Math.PI / 2;
+    cum += s.pct;
+    const end = (cum / total) * 2 * Math.PI - Math.PI / 2;
+    const x1 = cx + r * Math.cos(start);
+    const y1 = cy + r * Math.sin(start);
+    const x2 = cx + r * Math.cos(end);
+    const y2 = cy + r * Math.sin(end);
+    const large = end - start > Math.PI ? 1 : 0;
+    return (
+      <path
+        key={s.name}
+        d={`M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} Z`}
+        fill={PALETTE[i % PALETTE.length]}
+        stroke="white"
+        strokeWidth="1.5"
+      />
+    );
+  });
+
+  return (
+    <div className="flex flex-col items-start gap-3">
+      <svg viewBox="0 0 100 100" className="w-28 h-28 flex-shrink-0">
+        {paths}
+      </svg>
+      <div className="space-y-1">
+        {slices.map((s, i) => (
+          <div key={s.name} className="flex items-center gap-1.5 text-xs text-alabaster-grey-600">
+            <span
+              className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+              style={{ background: PALETTE[i % PALETTE.length] }}
+            />
+            {s.name} · {s.pct}%
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── sentiment score cell ───────────────────────────────────────────────────────
+
+function SentimentScoreCell({ score, description, bullets, label }: {
+  score: number; description: string; bullets: string[]; label?: string;
+}) {
+  const color = score >= 66 ? "text-mint-cream-600" : score >= 33 ? "text-steel-blue-600" : "text-sandy-brown-600";
+  return (
+    <div className="space-y-2">
+      <div className={cn("text-2xl font-bold", color)}>{score}<span className="text-sm text-alabaster-grey-400 font-normal">/100</span></div>
+      {label && <p className="text-xs font-semibold text-alabaster-grey-700">{label}</p>}
+      <p className="text-xs text-alabaster-grey-500 leading-relaxed">{description}</p>
+      <ul className="space-y-1 mt-1">
+        {bullets.map(b => (
+          <li key={b} className="flex items-start gap-1.5 text-xs text-alabaster-grey-500">
+            <span className="mt-1 h-1 w-1 rounded-full bg-alabaster-grey-300 flex-shrink-0" />
+            {b}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -641,6 +784,148 @@ export default function ReportPage() {
         </ul>
       )),
     },
+  ]; // end contextualRows
+
+  // ── Market Competition rows ───────────────────────────────────────────────
+  const marketCompetitionData = getMarketCompetitionData(report.overallScore);
+  const shareOfVoice = getMockShareOfVoice(report.companyName);
+
+  const marketCompetitionRows: GridRow[] = [
+    {
+      label: "Market Score",
+      cells: models.map((m) => (
+        <div key={m.modelId} className="space-y-2">
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl font-bold text-alabaster-grey-900">{marketCompetitionData.score}</span>
+            <span className="text-alabaster-grey-400 text-sm">/10</span>
+          </div>
+          <MeterBar value={marketCompetitionData.score} max={10} />
+        </div>
+      )),
+    },
+    {
+      label: "Share of Voice",
+      cells: models.map((m) => (
+        <div key={m.modelId}>
+          <PieChart slices={shareOfVoice} />
+        </div>
+      )),
+    },
+    {
+      label: "Mentions",
+      cells: models.map((m) => (
+        <span key={m.modelId} className="text-xl font-bold text-alabaster-grey-900">
+          {marketCompetitionData.mentions.toLocaleString()}
+        </span>
+      )),
+    },
+    {
+      label: "Comparison Mentions",
+      cells: models.map((m) => (
+        <span key={m.modelId} className="text-xl font-bold text-alabaster-grey-900">
+          {marketCompetitionData.comparisonMentions}
+        </span>
+      )),
+    },
+    {
+      label: "Common Comparisons",
+      isLast: true,
+      cells: models.map((m) => (
+        <ul key={m.modelId} className="space-y-1">
+          {marketCompetitionData.comparisonTopics.map((t) => (
+            <li key={t} className="flex items-start gap-1.5 text-xs text-alabaster-grey-600">
+              <span className="mt-1.5 h-1 w-1 rounded-full bg-alabaster-grey-400 flex-shrink-0" />
+              {t}
+            </li>
+          ))}
+        </ul>
+      )),
+    },
+  ];
+
+  // ── Sentiment rows ─────────────────────────────────────────────────────────
+  const sentimentData = getSentimentData(report.overallScore);
+
+  const sentimentRows: GridRow[] = [
+    {
+      label: "Sentiment Score",
+      cells: models.map((m) => (
+        <div key={m.modelId} className="space-y-2">
+          <SentimentScoreCell
+            score={sentimentData.totalScore}
+            description="Overall brand sentiment across all evaluated dimensions."
+            bullets={[]}
+          />
+          <MeterBar value={sentimentData.totalScore} max={100} />
+        </div>
+      )),
+    },
+    {
+      label: "General",
+      cells: models.map((m) => (
+        <div key={m.modelId}>
+          <SentimentScoreCell
+            score={sentimentData.general.score}
+            description={sentimentData.general.description}
+            bullets={sentimentData.general.keyFactors}
+          />
+        </div>
+      )),
+    },
+    {
+      label: "Contextual",
+      cells: models.map((m) => (
+        <div key={m.modelId}>
+          <SentimentScoreCell
+            score={sentimentData.contextual.score}
+            description={sentimentData.contextual.description}
+            bullets={sentimentData.contextual.keyFactors}
+          />
+        </div>
+      )),
+    },
+    {
+      label: "Source-Based",
+      cells: models.map((m) => (
+        <div key={m.modelId}>
+          <SentimentScoreCell
+            score={sentimentData.sourceBased.score}
+            description={sentimentData.sourceBased.description}
+            bullets={[]}
+          />
+        </div>
+      )),
+    },
+    {
+      label: "Polarization",
+      cells: models.map((m) => (
+        <div key={m.modelId}>
+          <SentimentScoreCell
+            score={sentimentData.polarization.score}
+            description={sentimentData.polarization.description}
+            bullets={sentimentData.polarization.insights}
+          />
+        </div>
+      )),
+    },
+    {
+      label: "Source Analysis",
+      isLast: true,
+      cells: models.map((m) => (
+        <div key={m.modelId} className="space-y-2">
+          <p className="text-xs font-semibold text-mint-cream-600">✓ Reliable Data Sources</p>
+          {sentimentData.sources.map((src) => (
+            <div key={src.name} className="p-2.5 rounded-lg bg-alabaster-grey-50 border border-alabaster-grey-200">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-semibold text-alabaster-grey-800">{src.name}</span>
+                <span className="text-xs font-bold text-steel-blue-600">{src.score}/100</span>
+              </div>
+              <p className="text-xs text-alabaster-grey-400 leading-relaxed">{src.note}</p>
+            </div>
+          ))}
+        </div>
+      )),
+    },
   ];
 
   // ── render ─────────────────────────────────────────────────────────────────
@@ -747,6 +1032,29 @@ export default function ReportPage() {
               <ComparisonGrid
                 modelCount={models.length}
                 rows={contextualRows}
+              />
+            </ReportSection>
+
+            {/* Market Competition */}
+            <ReportSection
+              title="Market Competition"
+              description="Measures your brand's presence in industry conversations compared to competitors — your share of voice."
+            >
+              <ComparisonGrid
+                modelCount={models.length}
+                rows={marketCompetitionRows}
+              />
+            </ReportSection>
+
+            {/* Sentiment Analysis */}
+            <ReportSection
+              title="Sentiment Analysis"
+              description="Evaluates the language in AI responses to determine the holistic sentiment and market perception of your brand."
+              alt
+            >
+              <ComparisonGrid
+                modelCount={models.length}
+                rows={sentimentRows}
               />
             </ReportSection>
 

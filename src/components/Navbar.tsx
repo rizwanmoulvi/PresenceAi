@@ -35,6 +35,12 @@ export default function Navbar() {
             >
               How it works
             </Link>
+            <Link
+              href="/my-reports"
+              className="text-sm font-medium text-alabaster-grey-600 hover:text-alabaster-grey-900 transition-colors"
+            >
+              My Reports
+            </Link>
             <Link href="/" className="btn-primary text-sm py-2 px-4">
               Get Started Free
             </Link>
@@ -65,6 +71,13 @@ export default function Navbar() {
               onClick={() => setOpen(false)}
             >
               How it works
+            </Link>
+            <Link
+              href="/my-reports"
+              className="block px-4 py-2 text-sm text-alabaster-grey-700 hover:text-alabaster-grey-900 rounded-lg hover:bg-alabaster-grey-100"
+              onClick={() => setOpen(false)}
+            >
+              My Reports
             </Link>
             <Link
               href="/"

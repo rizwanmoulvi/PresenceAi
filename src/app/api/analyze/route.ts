@@ -1,10 +1,5 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { runRealAnalysis } from "@/lib/llm";
-import { simulateAnalysis } from "@/lib/simulate";
-
-// Allow up to 60 s for real LLM calls (Vercel Pro / custom servers)
-export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
@@ -18,7 +13,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // 1 ─ Create the record immediately
+    // Create the record immediately and return the ID.
+    // The actual LLM analysis is triggered separately by the client
+    // via POST /api/analyze/[id]/run — this keeps the initial request
+    // well under Vercel's serverless timeout.
     const analysis = await prisma.analysis.create({
       data: {
         companyName,
@@ -29,27 +27,6 @@ export async function POST(request: Request) {
         modelScores: "[]",
         insights: "[]",
         recommendations: "[]",
-      },
-    });
-
-    // 2 ─ Run real multi-model LLM analysis; fall back to simulate on failure
-    let result;
-    try {
-      result = await runRealAnalysis(companyName, industry, geography, products);
-    } catch (llmErr) {
-      console.warn("LLM analysis failed, using simulate fallback:", llmErr);
-      result = simulateAnalysis(companyName, industry, geography, products);
-    }
-
-    // 3 ─ Persist results and mark complete
-    await prisma.analysis.update({
-      where: { id: analysis.id },
-      data: {
-        overallScore:    result.overallScore,
-        modelScores:     JSON.stringify(result.modelScores),
-        insights:        JSON.stringify(result.insights),
-        recommendations: JSON.stringify(result.recommendations),
-        status: "complete",
       },
     });
 

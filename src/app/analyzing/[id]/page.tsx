@@ -41,6 +41,11 @@ export default function AnalyzingPage() {
   const msgRef     = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    // ── kick off the LLM analysis in the background ─────────────────────────
+    // The run endpoint does the heavy lifting (maxDuration=60). We fire it
+    // without blocking the UI — polling below detects completion.
+    fetch(`/api/analyze/${id}/run`, { method: "POST" }).catch(() => {});
+
     // ── cycling status messages ──────────────────────────────────────────────
     let idx = 0;
     msgRef.current = setInterval(() => {

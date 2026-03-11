@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
 import Navbar from "@/components/Navbar";
-import SessionWrapper from "@/components/SessionWrapper";
 
 export const metadata: Metadata = {
   title: "PresenceAI — Generative Engine Optimization",
@@ -33,8 +32,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="min-h-screen hero-bg antialiased">
-        <SessionWrapper>
-          <Navbar />
+        <Navbar />
           <main className="relative z-10">{children}</main>
           <Toaster
             position="top-right"
@@ -54,7 +52,6 @@ export default function RootLayout({
               },
             }}
           />
-        </SessionWrapper>
       </body>
     </html>
   );

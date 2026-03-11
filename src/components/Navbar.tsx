@@ -1,12 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useSession, signOut } from "next-auth/react";
 import { useState } from "react";
-import { Menu, X, Zap, LogOut, User } from "lucide-react";
+import { Menu, X, Zap } from "lucide-react";
 
 export default function Navbar() {
-  const { data: session } = useSession();
   const [open, setOpen] = useState(false);
 
   return (
@@ -37,44 +35,9 @@ export default function Navbar() {
             >
               How it works
             </Link>
-
-            {session ? (
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 text-sm text-alabaster-grey-600">
-                  {session.user?.image ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={session.user.image}
-                      alt={session.user.name ?? "User"}
-                      className="h-7 w-7 rounded-full"
-                    />
-                  ) : (
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-steel-blue-100">
-                      <User className="h-3.5 w-3.5 text-steel-blue-600" />
-                    </div>
-                  )}
-                  <span className="max-w-[120px] truncate">
-                    {session.user?.name ?? session.user?.email}
-                  </span>
-                </div>
-                <button
-                  onClick={() => signOut({ callbackUrl: "/" })}
-                  className="btn-ghost text-sm py-1.5 px-3"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                  Sign out
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Link href="/auth/signin" className="btn-ghost text-sm py-1.5">
-                  Sign in
-                </Link>
-                <Link href="/auth/signup" className="btn-primary text-sm py-2 px-4">
-                  Get Started
-                </Link>
-              </div>
-            )}
+            <Link href="/" className="btn-primary text-sm py-2 px-4">
+              Get Started Free
+            </Link>
           </div>
 
           {/* Mobile toggle */}
@@ -103,31 +66,13 @@ export default function Navbar() {
             >
               How it works
             </Link>
-            {session ? (
-              <button
-                onClick={() => signOut({ callbackUrl: "/" })}
-                className="w-full text-left px-4 py-2 text-sm text-alabaster-grey-700 hover:text-alabaster-grey-900 rounded-lg hover:bg-alabaster-grey-100"
-              >
-                Sign out
-              </button>
-            ) : (
-              <>
-                <Link
-                  href="/auth/signin"
-                  className="block px-4 py-2 text-sm text-alabaster-grey-700 hover:text-alabaster-grey-900 rounded-lg hover:bg-alabaster-grey-100"
-                  onClick={() => setOpen(false)}
-                >
-                  Sign in
-                </Link>
-                <Link
-                  href="/auth/signup"
-                  className="block px-4 py-2 text-sm font-semibold text-white bg-steel-blue-600 rounded-lg"
-                  onClick={() => setOpen(false)}
-                >
-                  Get Started Free
-                </Link>
-              </>
-            )}
+            <Link
+              href="/"
+              className="block px-4 py-2 text-sm font-semibold text-white bg-steel-blue-600 rounded-lg"
+              onClick={() => setOpen(false)}
+            >
+              Get Started Free
+            </Link>
           </div>
         )}
       </nav>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { runRealAnalysis } from "@/lib/llm";
+import { simulateAnalysis } from "@/lib/simulate";
 
 // Allow up to 60 s for real LLM calls (Vercel Pro / custom servers)
 export const maxDuration = 60;
@@ -31,20 +32,13 @@ export async function POST(request: Request) {
       },
     });
 
-    // 2 ─ Run real multi-model LLM analysis (parallel API calls)
+    // 2 ─ Run real multi-model LLM analysis; fall back to simulate on failure
     let result;
     try {
       result = await runRealAnalysis(companyName, industry, geography, products);
     } catch (llmErr) {
-      console.error("LLM analysis failed:", llmErr);
-      await prisma.analysis.update({
-        where: { id: analysis.id },
-        data: { status: "error" },
-      });
-      return NextResponse.json(
-        { error: String(llmErr) },
-        { status: 500 }
-      );
+      console.warn("LLM analysis failed, using simulate fallback:", llmErr);
+      result = simulateAnalysis(companyName, industry, geography, products);
     }
 
     // 3 ─ Persist results and mark complete

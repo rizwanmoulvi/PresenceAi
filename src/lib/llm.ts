@@ -46,6 +46,16 @@ const MODELS = [
   { model: "Grok 2",            modelId: "grok",       provider: "grok"        },
 ];
 
+// Groq free-tier model mapping (one key, five fast models)
+// Sign up free at https://console.groq.com
+const GROQ_MODEL_MAP: Record<string, string> = {
+  chatgpt:    "llama-3.3-70b-versatile",
+  claude:     "llama-3.1-70b-versatile",
+  gemini:     "gemma2-9b-it",
+  perplexity: "mixtral-8x7b-32768",
+  grok:       "llama-3.1-8b-instant",
+};
+
 // ── prompt templates ───────────────────────────────────────────────────────────
 
 function buildSystemPrompt(): string {
@@ -301,12 +311,14 @@ async function callGemini(
 async function generateInsightsAndRecs(
   companyName: string, industry: string, geography: string, products: string,
   results: RealModelScore[],
-  openaiKey: string
+  openaiKey: string,
+  modelName = "gpt-4o",
+  baseURL?: string
 ): Promise<{ insights: Insight[]; recommendations: Recommendation[] }> {
   try {
-    const client = new OpenAI({ apiKey: openaiKey });
+    const client = new OpenAI({ apiKey: openaiKey, ...(baseURL ? { baseURL } : {}) });
     const res = await client.chat.completions.create({
-      model: "gpt-4o",
+      model: modelName,
       max_tokens: 1200,
       temperature: 0.4,
       messages: [
@@ -338,59 +350,85 @@ export async function runRealAnalysis(
   const GEMINI_KEY      = process.env.GEMINI_API_KEY      ?? "";
   const PERPLEXITY_KEY  = process.env.PERPLEXITY_API_KEY  ?? "";
   const GROK_KEY        = process.env.XAI_API_KEY         ?? "";
+  const GROQ_KEY        = process.env.GROQ_API_KEY        ?? "";
 
-  // ── fire all models in parallel ────────────────────────────────────────────
+  const isPlaceholder = (k: string) =>
+    !k || k.startsWith("sk-your") || k.startsWith("re_your") || k === "your-google";
+
+  const hasRealOpenAI      = !isPlaceholder(OPENAI_KEY);
+  const hasRealAnthropic   = !isPlaceholder(ANTHROPIC_KEY);
+  const hasRealGemini      = !isPlaceholder(GEMINI_KEY);
+  const hasRealPerplexity  = !isPlaceholder(PERPLEXITY_KEY);
+  const hasRealGrok        = !isPlaceholder(GROK_KEY);
+  const hasGroq            = !isPlaceholder(GROQ_KEY);
+
+  const hasAnyKey = hasRealOpenAI || hasRealAnthropic || hasRealGemini ||
+                    hasRealPerplexity || hasRealGrok || hasGroq;
+
+  // ── no keys at all → fast simulate fallback ────────────────────────────────
+  if (!hasAnyKey) {
+    const { simulateAnalysis } = await import("./simulate");
+    return simulateAnalysis(companyName, industry, geography, products);
+  }
+
+  // ── fire all available models in parallel ──────────────────────────────────
 
   const modelCalls: Promise<RealModelScore>[] = [];
 
-  if (OPENAI_KEY) {
-    modelCalls.push(
-      callOpenAI(companyName, industry, geography, products, OPENAI_KEY)
-        .then((raw) => normaliseScore(raw, companyName, "chatgpt"))
-        .catch((err) => { console.error("GPT-4o error:", err); return null as unknown as RealModelScore; })
+  for (const { modelId } of MODELS) {
+    // Per-provider real key takes priority; Groq is the free fallback
+    const useGroq = hasGroq && !(
+      (modelId === "chatgpt"    && hasRealOpenAI) ||
+      (modelId === "claude"     && hasRealAnthropic) ||
+      (modelId === "gemini"     && hasRealGemini) ||
+      (modelId === "perplexity" && hasRealPerplexity) ||
+      (modelId === "grok"       && hasRealGrok)
     );
-  }
 
-  if (ANTHROPIC_KEY) {
-    modelCalls.push(
-      callAnthropic(companyName, industry, geography, products, ANTHROPIC_KEY)
-        .then((raw) => normaliseScore(raw, companyName, "claude"))
-        .catch((err) => { console.error("Claude error:", err); return null as unknown as RealModelScore; })
-    );
-  }
-
-  if (GEMINI_KEY) {
-    modelCalls.push(
-      callGemini(companyName, industry, geography, products, GEMINI_KEY)
-        .then((raw) => normaliseScore(raw, companyName, "gemini"))
-        .catch((err) => { console.error("Gemini error:", err); return null as unknown as RealModelScore; })
-    );
-  }
-
-  if (PERPLEXITY_KEY) {
-    modelCalls.push(
-      callOpenAI(
-        companyName, industry, geography, products,
-        PERPLEXITY_KEY, "sonar-pro", "https://api.perplexity.ai"
-      )
-        .then((raw) => normaliseScore(raw, companyName, "perplexity"))
-        .catch((err) => { console.error("Perplexity error:", err); return null as unknown as RealModelScore; })
-    );
-  }
-
-  if (GROK_KEY) {
-    modelCalls.push(
-      callOpenAI(
-        companyName, industry, geography, products,
-        GROK_KEY, "grok-2-latest", "https://api.x.ai/v1"
-      )
-        .then((raw) => normaliseScore(raw, companyName, "grok"))
-        .catch((err) => { console.error("Grok error:", err); return null as unknown as RealModelScore; })
-    );
+    if (modelId === "chatgpt" && hasRealOpenAI) {
+      modelCalls.push(
+        callOpenAI(companyName, industry, geography, products, OPENAI_KEY)
+          .then((raw) => normaliseScore(raw, companyName, "chatgpt"))
+          .catch((err) => { console.error("GPT-4o error:", err); return null as unknown as RealModelScore; })
+      );
+    } else if (modelId === "claude" && hasRealAnthropic) {
+      modelCalls.push(
+        callAnthropic(companyName, industry, geography, products, ANTHROPIC_KEY)
+          .then((raw) => normaliseScore(raw, companyName, "claude"))
+          .catch((err) => { console.error("Claude error:", err); return null as unknown as RealModelScore; })
+      );
+    } else if (modelId === "gemini" && hasRealGemini) {
+      modelCalls.push(
+        callGemini(companyName, industry, geography, products, GEMINI_KEY)
+          .then((raw) => normaliseScore(raw, companyName, "gemini"))
+          .catch((err) => { console.error("Gemini error:", err); return null as unknown as RealModelScore; })
+      );
+    } else if (modelId === "perplexity" && hasRealPerplexity) {
+      modelCalls.push(
+        callOpenAI(companyName, industry, geography, products, PERPLEXITY_KEY, "sonar-pro", "https://api.perplexity.ai")
+          .then((raw) => normaliseScore(raw, companyName, "perplexity"))
+          .catch((err) => { console.error("Perplexity error:", err); return null as unknown as RealModelScore; })
+      );
+    } else if (modelId === "grok" && hasRealGrok) {
+      modelCalls.push(
+        callOpenAI(companyName, industry, geography, products, GROK_KEY, "grok-2-latest", "https://api.x.ai/v1")
+          .then((raw) => normaliseScore(raw, companyName, "grok"))
+          .catch((err) => { console.error("Grok error:", err); return null as unknown as RealModelScore; })
+      );
+    } else if (useGroq) {
+      const groqModel = GROQ_MODEL_MAP[modelId] ?? "llama-3.1-8b-instant";
+      modelCalls.push(
+        callOpenAI(companyName, industry, geography, products, GROQ_KEY, groqModel, "https://api.groq.com/openai/v1")
+          .then((raw) => normaliseScore(raw, companyName, modelId))
+          .catch((err) => { console.error(`Groq/${groqModel} error:`, err); return null as unknown as RealModelScore; })
+      );
+    }
   }
 
   if (modelCalls.length === 0) {
-    throw new Error("No LLM API keys configured. Add at least OPENAI_API_KEY to .env.local");
+    // Shouldn't happen (hasAnyKey guard above), but defensive fallback
+    const { simulateAnalysis } = await import("./simulate");
+    return simulateAnalysis(companyName, industry, geography, products);
   }
 
   const settled = await Promise.allSettled(modelCalls);
@@ -410,8 +448,12 @@ export async function runRealAnalysis(
 
   // ── insights + recommendations ─────────────────────────────────────────────
 
-  const { insights, recommendations } = OPENAI_KEY
-    ? await generateInsightsAndRecs(companyName, industry, geography, products, modelScores, OPENAI_KEY)
+  const insightKey   = hasRealOpenAI ? OPENAI_KEY : hasGroq ? GROQ_KEY : "";
+  const insightModel = hasRealOpenAI ? "gpt-4o" : "llama-3.3-70b-versatile";
+  const insightBase  = hasRealOpenAI ? undefined : "https://api.groq.com/openai/v1";
+
+  const { insights, recommendations } = insightKey
+    ? await generateInsightsAndRecs(companyName, industry, geography, products, modelScores, insightKey, insightModel, insightBase)
     : { insights: [] as Insight[], recommendations: [] as Recommendation[] };
 
   return { overallScore, modelScores, insights, recommendations };

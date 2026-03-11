@@ -30,7 +30,7 @@ export default function Navbar() {
               Analyzer
             </Link>
             <Link
-              href="/#how-it-works"
+              href="/how-it-works"
               className="text-sm font-medium text-alabaster-grey-600 hover:text-alabaster-grey-900 transition-colors"
             >
               How it works
@@ -60,7 +60,7 @@ export default function Navbar() {
               Analyzer
             </Link>
             <Link
-              href="/#how-it-works"
+              href="/how-it-works"
               className="block px-4 py-2 text-sm text-alabaster-grey-700 hover:text-alabaster-grey-900 rounded-lg hover:bg-alabaster-grey-100"
               onClick={() => setOpen(false)}
             >

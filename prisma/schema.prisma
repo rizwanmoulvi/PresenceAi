@@ -81,11 +81,22 @@ model Analysis {
 }
 
 model Lead {
-  id         String   @id @default(cuid())
-  email      String
-  analysisId String
-  company    String?
-  createdAt  DateTime @default(now())
+  id            String    @id @default(cuid())
+  email         String
+  analysisId    String
+  company       String?
+  industry      String?
+  geography     String?
+  products      String?
+  score         Float?
+  topRec        String?   // #1 recommendation title — personalisation anchor
+  emailSubject  String?
+  emailBodyText String?
+  emailBodyHtml String?
+  emailStatus   String    @default("pending") // pending | sent | bounced | replied | archived
+  emailSentAt   DateTime?
+  notes         String?
+  createdAt     DateTime  @default(now())
 
   analysis Analysis @relation(fields: [analysisId], references: [id])
 }

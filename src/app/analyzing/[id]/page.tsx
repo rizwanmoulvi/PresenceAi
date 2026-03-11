@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle2, Loader2, Lock, Zap } from "lucide-react";
+import { CheckCircle2, Loader2, Lock, Zap, AlertTriangle } from "lucide-react";
 import {
   OpenAILogo,
   AnthropicLogo,
@@ -13,11 +13,11 @@ import {
 } from "@/components/BrandLogos";
 
 const AI_MODELS = [
-  { id: "chatgpt",    name: "ChatGPT-4o",        Logo: OpenAILogo,     delay: 0    },
-  { id: "claude",     name: "Claude 3.5 Sonnet",  Logo: AnthropicLogo,  delay: 1200 },
-  { id: "gemini",     name: "Gemini 1.5 Pro",     Logo: GeminiLogo,     delay: 2400 },
-  { id: "perplexity", name: "Perplexity AI",      Logo: PerplexityLogo, delay: 3600 },
-  { id: "grok",       name: "Grok 2",             Logo: GrokLogo,       delay: 4800 },
+  { id: "chatgpt",    name: "ChatGPT-4o",        Logo: OpenAILogo,     },
+  { id: "claude",     name: "Claude 3.5 Sonnet",  Logo: AnthropicLogo,  },
+  { id: "gemini",     name: "Gemini 1.5 Pro",     Logo: GeminiLogo,     },
+  { id: "perplexity", name: "Perplexity AI",      Logo: PerplexityLogo, },
+  { id: "grok",       name: "Grok 2",             Logo: GrokLogo,       },
 ];
 
 const MESSAGES = [
@@ -33,48 +33,64 @@ export default function AnalyzingPage() {
   const params = useParams();
   const id = params.id as string;
 
-  const [completedModels, setCompletedModels] = useState<Set<string>>(
-    new Set()
-  );
-  const [messageIdx, setMessageIdx] = useState(0);
-  const [done, setDone] = useState(false);
+  const [completedModels, setCompletedModels] = useState<Set<string>>(new Set());
+  const [messageIdx, setMessageIdx]           = useState(0);
+  const [done, setDone]                       = useState(false);
+  const [error, setError]                     = useState<string | null>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const msgRef     = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    // Simulate each model completing
-    const timers: NodeJS.Timeout[] = [];
+    // ── cycling status messages ──────────────────────────────────────────────
+    let idx = 0;
+    msgRef.current = setInterval(() => {
+      idx = (idx + 1) % MESSAGES.length;
+      setMessageIdx(idx);
+    }, 2200);
 
-    AI_MODELS.forEach((model) => {
-      const t = setTimeout(() => {
-        setCompletedModels((prev) => {
-          const next = new Set(prev);
-          next.add(model.id);
-          return next;
-        });
-      }, model.delay + 1400);
-      timers.push(t);
-    });
+    // ── visual model tick (cosmetic, independent of real progress) ──────────
+    let modelIdx = 0;
+    const tickModel = () => {
+      if (modelIdx < AI_MODELS.length) {
+        const modelId = AI_MODELS[modelIdx].id;
+        setCompletedModels((prev) => { const n = new Set(prev); n.add(modelId); return n; });
+        modelIdx++;
+      }
+    };
 
-    // Cycle status messages
-    let msgIdx = 0;
-    const msgInterval = setInterval(() => {
-      msgIdx = (msgIdx + 1) % MESSAGES.length;
-      setMessageIdx(msgIdx);
-    }, 1600);
+    // ── real status polling ──────────────────────────────────────────────────
+    let elapsed = 0;
+    const INTERVAL = 2000; // poll every 2 s
 
-    // Redirect after all done
-    const finalTimer = setTimeout(() => {
-      setDone(true);
-      clearInterval(msgInterval);
-      setTimeout(() => {
-        router.push(`/report/${id}`);
-      }, 800);
-    }, AI_MODELS[AI_MODELS.length - 1].delay + 2600);
+    pollingRef.current = setInterval(async () => {
+      elapsed += INTERVAL;
 
-    timers.push(finalTimer);
+      // advance the cosmetic model ticker (1 model every ~6 s)
+      if (elapsed % 6000 === 0) tickModel();
+
+      try {
+        const res  = await fetch(`/api/report/${id}`);
+        if (!res.ok) return; // still pending DB record — keep waiting
+        const data = await res.json();
+
+        if (data.status === "complete") {
+          // Mark all models done and redirect
+          clearInterval(pollingRef.current!);
+          clearInterval(msgRef.current!);
+          setCompletedModels(new Set(AI_MODELS.map((m) => m.id)));
+          setDone(true);
+          setTimeout(() => router.push(`/report/${id}`), 1000);
+        } else if (data.status === "error") {
+          clearInterval(pollingRef.current!);
+          clearInterval(msgRef.current!);
+          setError("Analysis failed. Check your API keys and try again.");
+        }
+      } catch { /* network hiccup — keep polling */ }
+    }, INTERVAL);
 
     return () => {
-      timers.forEach(clearTimeout);
-      clearInterval(msgInterval);
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      if (msgRef.current)     clearInterval(msgRef.current);
     };
   }, [id, router]);
 
@@ -88,6 +104,16 @@ export default function AnalyzingPage() {
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[600px] w-[600px] rounded-full bg-steel-blue-100/40 blur-[140px]" />
       </div>
 
+      {error ? (
+        <div className="relative w-full max-w-lg text-center">
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-sandy-brown-50 border border-sandy-brown-200">
+            <AlertTriangle className="h-8 w-8 text-sandy-brown-500" />
+          </div>
+          <h1 className="text-2xl font-semibold text-alabaster-grey-900 mb-3">Analysis Failed</h1>
+          <p className="text-alabaster-grey-500 text-sm mb-6">{error}</p>
+          <a href="/" className="btn-primary inline-flex">Try Again</a>
+        </div>
+      ) : (
       <div className="relative w-full max-w-lg text-center">
         {/* Animated Logo */}
         <motion.div
@@ -212,6 +238,7 @@ export default function AnalyzingPage() {
           <span>Your data is analyzed securely and never shared with third parties.</span>
         </div>
       </div>
+      )}
     </div>
   );
 }

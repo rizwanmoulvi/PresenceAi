@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { simulateAnalysis } from "@/lib/simulate";
+import { runRealAnalysis } from "@/lib/llm";
+
+// Allow up to 60 s for real LLM calls (Vercel Pro / custom servers)
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
@@ -14,7 +17,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create initial record with pending status
+    // 1 ─ Create the record immediately
     const analysis = await prisma.analysis.create({
       data: {
         companyName,
@@ -28,16 +31,29 @@ export async function POST(request: Request) {
       },
     });
 
-    // Simulate async analysis (in production this would be a background job)
-    const result = simulateAnalysis(companyName, industry, geography, products);
+    // 2 ─ Run real multi-model LLM analysis (parallel API calls)
+    let result;
+    try {
+      result = await runRealAnalysis(companyName, industry, geography, products);
+    } catch (llmErr) {
+      console.error("LLM analysis failed:", llmErr);
+      await prisma.analysis.update({
+        where: { id: analysis.id },
+        data: { status: "error" },
+      });
+      return NextResponse.json(
+        { error: String(llmErr) },
+        { status: 500 }
+      );
+    }
 
-    // Update with results
+    // 3 ─ Persist results and mark complete
     await prisma.analysis.update({
       where: { id: analysis.id },
       data: {
-        overallScore: result.overallScore,
-        modelScores: JSON.stringify(result.modelScores),
-        insights: JSON.stringify(result.insights),
+        overallScore:    result.overallScore,
+        modelScores:     JSON.stringify(result.modelScores),
+        insights:        JSON.stringify(result.insights),
         recommendations: JSON.stringify(result.recommendations),
         status: "complete",
       },
@@ -45,7 +61,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: analysis.id });
   } catch (error) {
-    console.error("Analyze error:", error);
+    console.error("Analyze route error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

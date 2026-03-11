@@ -634,56 +634,85 @@ export default function ReportPage() {
     },
     {
       label: "Market Position",
-      cells: models.map((m) => (
-        <span
-          key={m.modelId}
-          className={cn(
-            "text-sm font-semibold",
-            m.score >= 70
-              ? "text-mint-cream-600"
-              : m.score >= 40
-              ? "text-steel-blue-600"
-              : "text-alabaster-grey-500"
-          )}
-        >
-          {getMarketPosition(m.score)}
-        </span>
-      )),
+      cells: models.map((m) => {
+        const pos = m.brandRecognitionData?.marketPosition ?? getMarketPosition(m.score);
+        return (
+          <span
+            key={m.modelId}
+            className={cn(
+              "text-sm font-semibold",
+              pos === "Leader" ? "text-mint-cream-600" :
+              pos === "Challenger" ? "text-steel-blue-600" :
+              "text-alabaster-grey-500"
+            )}
+          >
+            {pos}
+          </span>
+        );
+      }),
     },
     {
       label: "Brand Archetype",
       cells: models.map((m) => (
         <span key={m.modelId} className="text-sm font-medium text-alabaster-grey-700">
-          {getBrandArchetype(m.sentiment)}
+          {m.brandRecognitionData?.brandArchetype ?? getBrandArchetype(m.sentiment)}
         </span>
       )),
     },
     {
-      label: "Visibility Level",
+      label: "Confidence Level",
       cells: models.map((m) => (
-        <span
-          key={m.modelId}
-          className={cn(
-            "text-sm font-semibold capitalize",
-            m.visibility === "high"
-              ? "text-mint-cream-600"
-              : m.visibility === "medium"
-              ? "text-steel-blue-600"
-              : m.visibility === "low"
-              ? "text-alabaster-grey-500"
-              : "text-alabaster-grey-400"
-          )}
-        >
-          {m.visibility}
-        </span>
+        <div key={m.modelId} className="space-y-2">
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl font-bold text-alabaster-grey-900">
+              {m.brandRecognitionData?.confidenceLevel ?? m.score}
+            </span>
+            <span className="text-alabaster-grey-400 text-sm">%</span>
+          </div>
+          <MeterBar value={m.brandRecognitionData?.confidenceLevel ?? m.score} max={100} />
+        </div>
       )),
     },
     {
-      label: "Mentions",
+      label: "Mention Depth",
       cells: models.map((m) => (
-        <span key={m.modelId} className="text-xl font-bold text-alabaster-grey-900">
-          {m.mentions}
-        </span>
+        <div key={m.modelId} className="space-y-2">
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl font-bold text-alabaster-grey-900">
+              {m.brandRecognitionData?.mentionDepth ?? Math.round(m.score / 10)}
+            </span>
+            <span className="text-alabaster-grey-400 text-sm">/10</span>
+          </div>
+          <MeterBar value={m.brandRecognitionData?.mentionDepth ?? Math.round(m.score / 10)} max={10} />
+        </div>
+      )),
+    },
+    {
+      label: "Source Quality",
+      cells: models.map((m) => (
+        <div key={m.modelId} className="space-y-2">
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl font-bold text-alabaster-grey-900">
+              {m.brandRecognitionData?.sourceQuality ?? Math.round(m.score / 10)}
+            </span>
+            <span className="text-alabaster-grey-400 text-sm">/10</span>
+          </div>
+          <MeterBar value={m.brandRecognitionData?.sourceQuality ?? Math.round(m.score / 10)} max={10} />
+        </div>
+      )),
+    },
+    {
+      label: "Data Richness",
+      cells: models.map((m) => (
+        <div key={m.modelId} className="space-y-2">
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl font-bold text-alabaster-grey-900">
+              {m.brandRecognitionData?.dataRichness ?? Math.round(m.score / 10)}
+            </span>
+            <span className="text-alabaster-grey-400 text-sm">/10</span>
+          </div>
+          <MeterBar value={m.brandRecognitionData?.dataRichness ?? Math.round(m.score / 10)} max={10} />
+        </div>
       )),
     },
     {
@@ -706,39 +735,56 @@ export default function ReportPage() {
     {
       label: "Key Strengths",
       cells: models.map((m) => {
+        if (m.keyStrengths && m.keyStrengths.length > 0) {
+          return (
+            <ul key={m.modelId} className="space-y-1">
+              {m.keyStrengths.map((s) => (
+                <li key={s} className="flex items-start gap-1.5 text-xs text-alabaster-grey-600">
+                  <span className="mt-1 h-1 w-1 rounded-full bg-mint-cream-400 flex-shrink-0" />
+                  {s}
+                </li>
+              ))}
+            </ul>
+          );
+        }
         const s =
-          insights.find(
-            (i: Insight) => i.type === "strength" && i.models.includes(m.model)
-          ) ?? insights.find((i: Insight) => i.type === "strength");
+          insights.find((i: Insight) => i.type === "strength" && i.models.includes(m.model)) ??
+          insights.find((i: Insight) => i.type === "strength");
         return s ? (
           <div key={m.modelId}>
             <p className="text-xs font-semibold text-alabaster-grey-800 mb-1">{s.title}</p>
             <p className="text-xs text-alabaster-grey-500 leading-relaxed">{s.description}</p>
           </div>
         ) : (
-          <span key={m.modelId} className="text-xs text-alabaster-grey-400">
-            No data
-          </span>
+          <span key={m.modelId} className="text-xs text-alabaster-grey-400">No data</span>
         );
       }),
     },
     {
       label: "Growth Areas",
       cells: models.map((m) => {
+        if (m.growthAreas && m.growthAreas.length > 0) {
+          return (
+            <ul key={m.modelId} className="space-y-1">
+              {m.growthAreas.map((g) => (
+                <li key={g} className="flex items-start gap-1.5 text-xs text-alabaster-grey-600">
+                  <span className="mt-1 h-1 w-1 rounded-full bg-steel-blue-400 flex-shrink-0" />
+                  {g}
+                </li>
+              ))}
+            </ul>
+          );
+        }
         const o =
-          insights.find(
-            (i: Insight) =>
-              i.type === "opportunity" && i.models.includes(m.model)
-          ) ?? insights.find((i: Insight) => i.type === "opportunity");
+          insights.find((i: Insight) => i.type === "opportunity" && i.models.includes(m.model)) ??
+          insights.find((i: Insight) => i.type === "opportunity");
         return o ? (
           <div key={m.modelId}>
             <p className="text-xs font-semibold text-alabaster-grey-800 mb-1">{o.title}</p>
             <p className="text-xs text-alabaster-grey-500 leading-relaxed">{o.description}</p>
           </div>
         ) : (
-          <span key={m.modelId} className="text-xs text-alabaster-grey-400">
-            No data
-          </span>
+          <span key={m.modelId} className="text-xs text-alabaster-grey-400">No data</span>
         );
       }),
     },
@@ -746,23 +792,14 @@ export default function ReportPage() {
       label: "Market Trajectory",
       isLast: true,
       cells: models.map((m) => {
-        const trajectory =
-          m.sentiment === "positive"
-            ? "Positive growth"
-            : m.sentiment === "neutral"
-            ? "Steady — room to grow"
-            : "Needs attention";
-        const threat = insights.find((i: Insight) => i.type === "threat");
+        const traj = m.marketTrajectory;
+        const icon = traj === "Rising" ? <TrendingUp className="h-4 w-4 text-mint-cream-500 inline mr-1" /> :
+                     traj === "Declining" ? <TrendingDown className="h-4 w-4 text-sandy-brown-500 inline mr-1" /> :
+                     <Minus className="h-4 w-4 text-steel-blue-400 inline mr-1" />;
+        const label = traj ?? (m.sentiment === "positive" ? "Rising" : m.sentiment === "neutral" ? "Stable" : "Declining");
         return (
           <div key={m.modelId}>
-            <p className="text-sm font-semibold text-alabaster-grey-800 mb-1">
-              {trajectory}
-            </p>
-            {threat && (
-              <p className="text-xs text-alabaster-grey-500 leading-relaxed">
-                {threat.description}
-              </p>
-            )}
+            <p className="text-sm font-semibold text-alabaster-grey-800 mb-1">{icon}{label}</p>
           </div>
         );
       }),
@@ -773,49 +810,55 @@ export default function ReportPage() {
     {
       label: "Narrative Themes",
       isLast: true,
-      cells: models.map((m) => (
-        <ul key={m.modelId} className="space-y-1.5">
-          {m.topKeywords.map((kw) => (
-            <li key={kw} className="flex items-start gap-1.5 text-xs text-alabaster-grey-600">
-              <span className="mt-1.5 h-1 w-1 rounded-full bg-alabaster-grey-400 flex-shrink-0" />
-              {kw}
-            </li>
-          ))}
-        </ul>
-      )),
+      cells: models.map((m) => {
+        const themes = (m.narrativeThemes && m.narrativeThemes.length > 0) ? m.narrativeThemes : m.topKeywords;
+        return (
+          <ul key={m.modelId} className="space-y-1.5">
+            {themes.map((kw) => (
+              <li key={kw} className="flex items-start gap-1.5 text-xs text-alabaster-grey-600">
+                <span className="mt-1.5 h-1 w-1 rounded-full bg-alabaster-grey-400 flex-shrink-0" />
+                {kw}
+              </li>
+            ))}
+          </ul>
+        );
+      }),
     },
   ]; // end contextualRows
 
-  // ── Market Competition rows ───────────────────────────────────────────────
-  const marketCompetitionData = getMarketCompetitionData(report.overallScore);
-  const shareOfVoice = getMockShareOfVoice(report.companyName);
-
+  // ── Market Competition rows (real LLM data with fallbacks) ─────────────────
   const marketCompetitionRows: GridRow[] = [
     {
       label: "Market Score",
-      cells: models.map((m) => (
-        <div key={m.modelId} className="space-y-2">
-          <div className="flex items-baseline gap-1">
-            <span className="text-xl font-bold text-alabaster-grey-900">{marketCompetitionData.score}</span>
-            <span className="text-alabaster-grey-400 text-sm">/10</span>
+      cells: models.map((m) => {
+        const score = m.marketScore ?? Math.round((m.score / 100) * 10);
+        return (
+          <div key={m.modelId} className="space-y-2">
+            <div className="flex items-baseline gap-1">
+              <span className="text-xl font-bold text-alabaster-grey-900">{score}</span>
+              <span className="text-alabaster-grey-400 text-sm">/10</span>
+            </div>
+            <MeterBar value={score} max={10} />
           </div>
-          <MeterBar value={marketCompetitionData.score} max={10} />
-        </div>
-      )),
+        );
+      }),
     },
     {
       label: "Share of Voice",
-      cells: models.map((m) => (
-        <div key={m.modelId}>
-          <PieChart slices={shareOfVoice} />
-        </div>
-      )),
+      cells: models.map((m) => {
+        const slices = m.shareOfVoice ?? getMockShareOfVoice(report.companyName);
+        return (
+          <div key={m.modelId}>
+            <PieChart slices={slices} />
+          </div>
+        );
+      }),
     },
     {
       label: "Mentions",
       cells: models.map((m) => (
         <span key={m.modelId} className="text-xl font-bold text-alabaster-grey-900">
-          {marketCompetitionData.mentions.toLocaleString()}
+          {m.mentions.toLocaleString()}
         </span>
       )),
     },
@@ -823,108 +866,116 @@ export default function ReportPage() {
       label: "Comparison Mentions",
       cells: models.map((m) => (
         <span key={m.modelId} className="text-xl font-bold text-alabaster-grey-900">
-          {marketCompetitionData.comparisonMentions}
+          {(m.comparisonMentions ?? Math.round(m.mentions * 0.6)).toLocaleString()}
         </span>
       )),
     },
     {
       label: "Common Comparisons",
       isLast: true,
-      cells: models.map((m) => (
-        <ul key={m.modelId} className="space-y-1">
-          {marketCompetitionData.comparisonTopics.map((t) => (
-            <li key={t} className="flex items-start gap-1.5 text-xs text-alabaster-grey-600">
-              <span className="mt-1.5 h-1 w-1 rounded-full bg-alabaster-grey-400 flex-shrink-0" />
-              {t}
-            </li>
-          ))}
-        </ul>
-      )),
+      cells: models.map((m) => {
+        const topics = m.comparisonTopics && m.comparisonTopics.length > 0
+          ? m.comparisonTopics
+          : getMarketCompetitionData(m.score).comparisonTopics;
+        return (
+          <ul key={m.modelId} className="space-y-1">
+            {topics.map((t) => (
+              <li key={t} className="flex items-start gap-1.5 text-xs text-alabaster-grey-600">
+                <span className="mt-1.5 h-1 w-1 rounded-full bg-alabaster-grey-400 flex-shrink-0" />
+                {t}
+              </li>
+            ))}
+          </ul>
+        );
+      }),
     },
   ];
 
-  // ── Sentiment rows ─────────────────────────────────────────────────────────
-  const sentimentData = getSentimentData(report.overallScore);
-
+  // ── Sentiment rows (real LLM data with fallbacks) ──────────────────────────
   const sentimentRows: GridRow[] = [
     {
       label: "Sentiment Score",
-      cells: models.map((m) => (
-        <div key={m.modelId} className="space-y-2">
-          <SentimentScoreCell
-            score={sentimentData.totalScore}
-            description="Overall brand sentiment across all evaluated dimensions."
-            bullets={[]}
-          />
-          <MeterBar value={sentimentData.totalScore} max={100} />
-        </div>
-      )),
+      cells: models.map((m) => {
+        const sd = m.sentimentBreakdown ?? getSentimentData(m.score);
+        const totalScore = m.sentimentBreakdown
+          ? Math.round((m.sentimentBreakdown.general.score + m.sentimentBreakdown.contextual.score + m.sentimentBreakdown.sourceBased.score) / 3)
+          : getSentimentData(m.score).totalScore;
+        return (
+          <div key={m.modelId} className="space-y-2">
+            <SentimentScoreCell
+              score={totalScore}
+              description="Overall brand sentiment across all evaluated dimensions."
+              bullets={[]}
+            />
+            <MeterBar value={totalScore} max={100} />
+          </div>
+        );
+      }),
     },
     {
       label: "General",
-      cells: models.map((m) => (
-        <div key={m.modelId}>
-          <SentimentScoreCell
-            score={sentimentData.general.score}
-            description={sentimentData.general.description}
-            bullets={sentimentData.general.keyFactors}
-          />
-        </div>
-      )),
+      cells: models.map((m) => {
+        const g = m.sentimentBreakdown?.general ?? getSentimentData(m.score).general;
+        return (
+          <div key={m.modelId}>
+            <SentimentScoreCell score={g.score} description={g.description} bullets={g.keyFactors} />
+          </div>
+        );
+      }),
     },
     {
       label: "Contextual",
-      cells: models.map((m) => (
-        <div key={m.modelId}>
-          <SentimentScoreCell
-            score={sentimentData.contextual.score}
-            description={sentimentData.contextual.description}
-            bullets={sentimentData.contextual.keyFactors}
-          />
-        </div>
-      )),
+      cells: models.map((m) => {
+        const c = m.sentimentBreakdown?.contextual ?? getSentimentData(m.score).contextual;
+        return (
+          <div key={m.modelId}>
+            <SentimentScoreCell score={c.score} description={c.description} bullets={c.keyFactors} />
+          </div>
+        );
+      }),
     },
     {
       label: "Source-Based",
-      cells: models.map((m) => (
-        <div key={m.modelId}>
-          <SentimentScoreCell
-            score={sentimentData.sourceBased.score}
-            description={sentimentData.sourceBased.description}
-            bullets={[]}
-          />
-        </div>
-      )),
+      cells: models.map((m) => {
+        const s = m.sentimentBreakdown?.sourceBased ?? getSentimentData(m.score).sourceBased;
+        return (
+          <div key={m.modelId}>
+            <SentimentScoreCell score={s.score} description={s.description} bullets={[]} />
+          </div>
+        );
+      }),
     },
     {
       label: "Polarization",
-      cells: models.map((m) => (
-        <div key={m.modelId}>
-          <SentimentScoreCell
-            score={sentimentData.polarization.score}
-            description={sentimentData.polarization.description}
-            bullets={sentimentData.polarization.insights}
-          />
-        </div>
-      )),
+      cells: models.map((m) => {
+        const p = m.sentimentBreakdown?.polarization ?? getSentimentData(m.score).polarization;
+        return (
+          <div key={m.modelId}>
+            <SentimentScoreCell score={p.score} description={p.description} bullets={p.insights} />
+          </div>
+        );
+      }),
     },
     {
       label: "Source Analysis",
       isLast: true,
-      cells: models.map((m) => (
-        <div key={m.modelId} className="space-y-2">
-          <p className="text-xs font-semibold text-mint-cream-600">✓ Reliable Data Sources</p>
-          {sentimentData.sources.map((src) => (
-            <div key={src.name} className="p-2.5 rounded-lg bg-alabaster-grey-50 border border-alabaster-grey-200">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-semibold text-alabaster-grey-800">{src.name}</span>
-                <span className="text-xs font-bold text-steel-blue-600">{src.score}/100</span>
+      cells: models.map((m) => {
+        const sources = m.sentimentBreakdown?.sources ?? getSentimentData(m.score).sources;
+        return (
+          <div key={m.modelId} className="space-y-2">
+            <p className="text-xs font-semibold text-mint-cream-600">✓ Reliable Data Sources</p>
+            {sources.map((src) => (
+              <div key={src.name} className="p-2.5 rounded-lg bg-alabaster-grey-50 border border-alabaster-grey-200">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-semibold text-alabaster-grey-800">{src.name}</span>
+                  <span className="text-xs font-bold text-steel-blue-600">{src.score}/100</span>
+                </div>
+                <p className="text-xs text-alabaster-grey-400 leading-relaxed">{src.note}</p>
               </div>
-              <p className="text-xs text-alabaster-grey-400 leading-relaxed">{src.note}</p>
-            </div>
-          ))}
-        </div>
-      )),
+            ))}
+          </div>
+        );
+      }),
     },
   ];
 

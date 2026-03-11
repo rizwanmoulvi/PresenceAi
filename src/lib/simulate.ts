@@ -7,6 +7,31 @@ export interface ModelScore {
   sentiment: "positive" | "neutral" | "negative";
   topKeywords: string[];
   sampleResponse: string;
+
+  // ── real LLM fields (populated when API keys are present) ──
+  brandRecognitionData?: {
+    marketPosition: "Leader" | "Challenger" | "Niche";
+    brandArchetype: "Innovator" | "Traditionalist" | "Disruptor";
+    confidenceLevel: number;
+    mentionDepth: number;
+    sourceQuality: number;
+    dataRichness: number;
+  };
+  keyStrengths?: string[];
+  growthAreas?: string[];
+  marketTrajectory?: "Rising" | "Stable" | "Declining";
+  narrativeThemes?: string[];
+  marketScore?: number;
+  comparisonMentions?: number;
+  comparisonTopics?: string[];
+  shareOfVoice?: { name: string; pct: number }[];
+  sentimentBreakdown?: {
+    general:     { score: number; description: string; keyFactors: string[] };
+    contextual:  { score: number; description: string; keyFactors: string[] };
+    sourceBased: { score: number; description: string; keyFactors: string[] };
+    polarization:{ score: number; description: string; insights:   string[] };
+    sources: { name: string; type: string; score: number; note: string }[];
+  };
 }
 
 export interface SimulationResult {
